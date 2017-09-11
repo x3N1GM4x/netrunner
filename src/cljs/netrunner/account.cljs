@@ -5,8 +5,7 @@
             [cljs.core.async :refer [chan put!] :as async]
             [netrunner.auth :refer [authenticated avatar] :as auth]
             [netrunner.appstate :refer [app-state]]
-            [netrunner.ajax :refer [POST GET]]
-            [netrunner.cardbrowser :refer [cards-channel]]))
+            [netrunner.ajax :refer [POST GET]]))
 
 (defn load-alt-arts []
   (go (let [cards (->> (<! (GET "/data/altarts"))
