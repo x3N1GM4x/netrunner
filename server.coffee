@@ -380,7 +380,7 @@ app.get '/logout', (req, res) ->
   req.logout()
   res.redirect('/')
 
-app.post '/register', (req, res) ->
+app.post '/register', (req, res, next) ->
   if req.body.username.length > 20
     res.status(423).send({message: 'Usernames are limited to 20 characters'})
   else
@@ -399,19 +399,24 @@ app.post '/register', (req, res) ->
             hashPassword req.body.password, (err, hash) ->
               req.body.password = hash
               db.collection('users').insert req.body, (err) ->
-                res.send("error: #{err}") if err
-                req.login req.body, (err) -> next(err) if err
-                db.collection('decks').find({username: '__demo__'}).toArray (err, demoDecks) ->
-                  throw err if err
-                  for deck in demoDecks
-                    delete deck._id
-                    deck.username = req.body.username
-                  if demoDecks.length > 0
-                    db.collection('decks').insert demoDecks, (err, newDecks) ->
-                      throw err if err
-                      res.status(200).json({user: req.user, decks: newDecks})
-                  else
-                    res.status(200).json({user: req.user, decks: []})
+                if err
+                  res.send("error: #{err}")
+                else
+                  req.login req.body, (err) ->
+                    if err
+                      next(err)
+                    else
+                      db.collection('decks').find({username: '__demo__'}).toArray (err, demoDecks) ->
+                        throw err if err
+                        for deck in demoDecks
+                          delete deck._id
+                          deck.username = req.body.username
+                        if demoDecks.length > 0
+                          db.collection('decks').insert demoDecks, (err, newDecks) ->
+                            throw err if err
+                            res.status(200).json({user: req.user, decks: newDecks})
+                        else
+                          res.status(200).json({user: req.user, decks: []})
 
 app.post '/forgot', (req, res) ->
   async.waterfall [
@@ -517,7 +522,7 @@ app.post '/reset/:token', (req, res) ->
 app.post '/update-profile', (req, res) ->
   if req.user
     db.collection('users').update {username: req.user.username}, {$set: {options: {background: req.body.background,\
-      'show-alt-art': req.body['show-alt-art']}}}, \
+      'alt-arts': req.body['alt-arts'], 'show-alt-art': req.body['show-alt-art']}}}, \
       (err) ->
         console.log(err) if err
         res.status(200).send({message: 'OK', background: req.body.background, altarts: req.body['alt-arts']})
@@ -545,6 +550,12 @@ app.get '/data/decks', (req, res) ->
 
 app.post '/data/decks', (req, res) ->
   deck = req.body
+  sanitized_cards = deck.cards.map (entry) ->
+    sanitized_entries = {}
+    for k, v of entry
+      sanitized_entries[k] = v if k in ["qty", "card", "id", "art"]
+    sanitized_entries
+  deck.cards = sanitized_cards
   if req.user
     deck.username = req.user.username
     if deck._id
@@ -570,7 +581,11 @@ app.post '/data/decks/delete', (req, res) ->
 
 app.get '/data/donators', (req, res) ->
   db.collection('donators').find({}).sort({amount: -1}).toArray (err, data) ->
-    res.status(200).json(d.username or d.name for d in data)
+    if data
+      res.status(200).json(d.username or d.name for d in data)
+    else
+      res.status(200).json([])
+    throw err if err
 
 app.get '/data/news', (req, res) ->
   if process.env['TRELLO_API_KEY']
